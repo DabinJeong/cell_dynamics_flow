@@ -1,0 +1,15 @@
+# data / predictions
+*.npz
+# training artifacts
+train.log
+train.err
+_run_train.sh
+mfm_predictions.npz
+# environment / caches
+.venv/
+.uv-cache/
+.uv-python/
+__pycache__/
+*.pyc
+._*
+.DS_Store
