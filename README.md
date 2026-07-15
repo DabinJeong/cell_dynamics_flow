@@ -72,5 +72,5 @@ avoids the inter-arm barycentric smear of an unconditioned mixture-weighted flow
 ## Results
 ![benchmark](figures/fig_benchmark_subset.png)
 
-![benchmark_viz](figures/fig_benchmark_subset.png)
+![benchmark_viz](figures/fig_pred_day4_umap.png)
 
