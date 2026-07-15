@@ -3,6 +3,7 @@
 Metric Flow Matching (MFM, [Kapusniak et al. 2024, arXiv:2405.14780](https://arxiv.org/abs/2405.14780))
 vs straight-line Flow Matching (CondOT) on the LARRY state-fate hematopoiesis data
 (day2 → day6, **day4 held out** as the intermediate marginal to recover).
+![dataset](figures/fig_timepoints_umap.png)
 
 The package mirrors the module layout of the official reference implementation
 [kkapusniak/metric-flow-matching](https://github.com/kkapusniak/metric-flow-matching).
@@ -52,7 +53,7 @@ python -m mfm.train.main_mixgeoflow --data larry_pca_mfm.npz --out mixgeoflow_pr
 `mfm_predictions.npz` holds `fm_pred_day4/day6` and `mfm_pred_day4/day6` in the
 original 50-d PCA coordinates, ready for W2/energy/MMD scoring against real day4.
 
-## Mixture-Flow family
+## FateFlow (fate-channel mixture flow)
 Motivated by the empirical finding that held-out day4 is largely a *reweighting* of
 fixed modes on the shared day2∪day6 support. Both models factorize transport into `K`
 fate **channels**: a `K`-mode GMM on day6, a mode-level entropic-OT plan coupling day2
@@ -60,10 +61,16 @@ fate **channels**: a `K`-mode GMM on day6, a mode-level entropic-OT plan couplin
 reweighting structure yet stays generative (produces novel on-arm coordinates) and
 avoids the inter-arm barycentric smear of an unconditioned mixture-weighted flow.
 
-- **Mixture-Flow** (`models/mixflow.py`) uses a straight per-channel chord. On LARRY it
+- **FateFlow** (`models/mixflow.py`) uses a straight per-channel chord. On LARRY it
   is the only generative model here to recover real branch commitment.
-- **Mixture-Geodesic-Flow** (`models/mixgeoflow.py`) replaces the chord with a
+- **FateFlow-Geo** (`models/mixgeoflow.py`) replaces the chord with a
   density-metric geodesic. **Recorded negative result:** the geodesic *raised* path
   energy and slightly reduced commitment — the density metric treats the dense
   undifferentiated blob as cheap and pulls paths toward it, opposing the channel
   conditioning. Retained for reproducibility and ablation, not as the recommended run.
+
+## Results
+![benchmark](figures/fig_benchmark_subset.png)
+
+![benchmark_viz](figures/fig_benchmark_subset.png)
+
