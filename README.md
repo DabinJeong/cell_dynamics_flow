@@ -24,7 +24,7 @@ Because day 4 is never shown to the model, how closely the interpolated populati
 matches the real day-4 cells is a direct, quantitative test of whether the recovered
 dynamics are biologically faithful.
 
-![dataset](figures/fig_benchmark_subset.png)
+![dataset](figures/fig_timepoints_umap.png)
 
 We use the HVG-filtered, PCA-embedded `invitro-hvg.h5ad` with cells grouped by collection time (day 2 / 4 / 6).
 
