@@ -24,7 +24,7 @@ Because day 4 is never shown to the model, how closely the interpolated populati
 matches the real day-4 cells is a direct, quantitative test of whether the recovered
 dynamics are biologically faithful.
 
-![dataset]({{artifact:art_2f47a253-eff4-48ad-b607-ef6cece4dc0c}})
+![dataset]({figures/fig_benchmark_subset.png})
 
 We use the HVG-filtered, PCA-embedded `invitro-hvg.h5ad` with cells grouped by collection time (day 2 / 4 / 6).
 
@@ -95,6 +95,6 @@ Baseline implementations for reproducing the benchmarking results: TBU.
 
 FateFlow's day-4 reconstruction is compared against the real held-out population and against straight-line flow matching and OT-based baselines using distributional metrics (2-Wasserstein, energy distance, MMD) in PCA space, plus qualitative overlays on the shared UMAP.
 
-![benchmark]({{artifact:art_0494a3a8-cde9-4152-9b4f-ad7faf8b8600}})
+![benchmark]({figures/fig_benchmark_subset.png})
 
-![benchmark_viz]({{artifact:art_4ec8110b-b753-475a-a512-a79608c528a9}})
+![benchmark_viz]({figures/fig_pred_day4_umap.png})
