@@ -1,76 +1,100 @@
-# Cell_dynamics_flow
+# FateFlow: Flow matching for interpolating cell dynamics during development
 
-Metric Flow Matching (MFM, [Kapusniak et al. 2024, arXiv:2405.14780](https://arxiv.org/abs/2405.14780))
-vs straight-line Flow Matching (CondOT) on the LARRY state-fate hematopoiesis data
-(day2 → day6, **day4 held out** as the intermediate marginal to recover).
-![dataset](figures/fig_timepoints_umap.png)
+## The scientific question
 
-The package mirrors the module layout of the official reference implementation
-[kkapusniak/metric-flow-matching](https://github.com/kkapusniak/metric-flow-matching).
-Algorithm code (EMA, the `MetricFlowMatcher` conditional path/flow, the LAND and
-RBF data-manifold metrics, the OT coupling) follows the official files closely;
-the pytorch_lightning + wandb orchestration is replaced with plain-torch training
-loops so the code runs unattended on a batch scheduler without those heavy deps.
+Development is a continuous, highly dynamic process, but we can only ever watch it in snapshots. Single-cell RNA sequencing is *destructive*: a cell is consumed the moment it is measured. What we get instead is a set of unpaired marginal distributions, one per sampled timepoint.
 
-## Layout
+> **Given the cell states we *did* measure, can we recover the states at the
+> timepoints we *did not* — the continuous dynamics hidden between snapshots?**
+
+FateFlow frames this as an **interpolation problem in gene-expression space**: learn a
+transport that carries the earlier population into the later one, and read off the
+intermediate populations it passes through.
+
+## Benchmark: recover a held-out timepoint
+
+We test this on the LARRY state-fate hematopoiesis dataset
+([Weinreb et al. 2020, *Science*](https://www.science.org/doi/abs/10.1126/science.aaw3381)),
+which measures mouse hematopoietic progenitors at **day 2, day 4, and day 6**.
+
+- **Observed:** day 2 (source) and day 6 (target)
+- **Held out:** day 4 — the intermediate marginal we try to reconstruct
+
+Because day 4 is never shown to the model, how closely the interpolated population
+matches the real day-4 cells is a direct, quantitative test of whether the recovered
+dynamics are biologically faithful.
+
+![dataset]({{artifact:art_2f47a253-eff4-48ad-b607-ef6cece4dc0c}})
+
+We use the HVG-filtered, PCA-embedded `invitro-hvg.h5ad` with cells grouped by collection time (day 2 / 4 / 6).
+
+## What we propose: FateFlow
+
+A natural framework is flow matching: learn how the day-2 population
+flows toward day 6, then read off the intermediate state.
+
+- The simplest choice connects cells along straight lines (optimal transport). This works well in many settings, though in a branched landscape the paths pass through the sparse region between fates.
+- MFM refines this by bending paths toward denser regions, following the data manifold, keeping trajectories close to where real cells live. Its focus is on the *geometry of the path*.
+
+These approaches shape *how cells travel*. Our observation is that the intermediate population is captured well by a complementary view: *which fates the cells occupy*.
+
+We propose **FateFlow**, based on the observation that the intermediate cell population is close to a **reweighting of a fixed set of
+fates** rather than movement into new territory. We build on this by separating two
+questions:
+
+1. **How the fate proportions shift**: we identify 12 fate groups (modes) from the
+   end timepoint, then use optimal transport to interpolate how each group's share evolves
+   from the start timepoint.
+2. **How cells move within each fate**: we learn a flow that is conditioned on the
+   target fate. Because each cell knows the fate it is heading toward, the branches
+   stay distinct and trajectories remain on their own arm.
+
+Once trained, we assign each cell its fate and integrate the flow to produce the
+day-4 (intermediate) and day-6 (endpoint) populations.
+
+## Repository layout
+
+The package builds upon the [official MFM codebase](https://github.com/kkapusniak/metric-flow-matching) [[Kapuśniak et al. 2024, NeurIPS](https://proceedings.neurips.cc/paper_files/paper/2024/file/f381114cf5aba4e45552869863deaaa7-Paper-Conference.pdf)].
+
+<!-- TODO: confirm these match your current CLI before publishing -->
 ```
-mfm/
-  flow_matchers/
-    ema.py                 EMA of model params
-    models/mfm.py          MetricFlowMatcher: geodesic/straight conditional path + target velocity
-    models/mixflow.py      Mixture-Flow: fate-channel-conditioned generative flow (straight path)
-    models/mixgeoflow.py   Mixture-Geodesic-Flow: fate-channel flow with a density-metric geodesic
-    geopath_net_train.py   ALGO 1: train geodesic interpolant (min metric geodesic energy)
-    flow_net_train.py      ALGO 2: (metric) flow matching + NeuralODE prediction
-  geo_metrics/
-    land.py                LAND diagonal metric (closed form)
-    rbf.py                 RBF density network metric (KMeans centers, h->1 on data)
-    metric_factory.py      DataManifoldMetric: picks land/rbf, metric-weighted velocity
-    density.py             scalar conformal KDE metric g(x)=1/(rho_hat+rho0) (Mixture-Geodesic-Flow)
-  networks/
-    flow_networks/         VelocityNet + FateCondVelocity (fate-mode-embedded velocity)
-    geopath_networks/      GeoPathMLP + InterpolantCorrection (endpoint-fixed geodesic)
-    ...                    SimpleDenseNet backbone
-  dataloaders/
-    trajectory_data.py     LARRY npz loader, per-timestep frames, OT sampler (POT)
-    channels.py            fate-channel build (day6-GMM + mode-OT Sinkhorn) + mode-block sampler
-  train/
-    parsers.py             CLI args (defaults from official single_cell/50dims configs)
-    main.py                two-stage train of MFM + straight-FM; predict day4/day6
-    main_mixflow.py        train Mixture-Flow; predict day4/day6
-    main_mixgeoflow.py     train Mixture-Geodesic-Flow; predict day4/day6
-prepare_data.py            build larry_pca_mfm.npz from day{2,4,6}.npz (X_pca)
-run_umap.py                shared-UMAP embedding of all methods' day4 predictions
+cdf/mfm/
+├── flow_matchers/      # EMA, MetricFlowMatcher, geopath/flow-net training
+├── geo_metrics/        # LAND, RBF, metric factory
+├── networks/           # velocity / interpolant networks
+├── dataloaders/        # trajectory_data
+├── train/              # main entrypoint, argument parsers
+└── utils/
 ```
 
-## Run
+## Installation
+
+<!-- TODO: fill in with your actual environment manager -->
 ```bash
-python prepare_data.py --src_dir <dir with day2/4/6.npz> --out larry_pca_mfm.npz
-python -m mfm.train.main            --data larry_pca_mfm.npz --out mfm_predictions.npz
-python -m mfm.train.main_mixflow    --data larry_pca_mfm.npz --out mixflow_predictions.npz
-python -m mfm.train.main_mixgeoflow --data larry_pca_mfm.npz --out mixgeoflow_predictions.npz
+git clone git@github.com:DabinJeong/cell_dynamics_flow.git
+cd cell_dynamics_flow
+pip install -e .
 ```
-`mfm_predictions.npz` holds `fm_pred_day4/day6` and `mfm_pred_day4/day6` in the
-original 50-d PCA coordinates, ready for W2/energy/MMD scoring against real day4.
 
-## FateFlow (fate-channel mixture flow)
-Motivated by the empirical finding that held-out day4 is largely a *reweighting* of
-fixed modes on the shared day2∪day6 support. Both models factorize transport into `K`
-fate **channels**: a `K`-mode GMM on day6, a mode-level entropic-OT plan coupling day2
-→ day6 mode mass, and a velocity **conditioned on the target fate mode**. This keeps the
-reweighting structure yet stays generative (produces novel on-arm coordinates) and
-avoids the inter-arm barycentric smear of an unconditioned mixture-weighted flow.
+## Usage
 
-- **FateFlow** (`models/mixflow.py`) uses a straight per-channel chord. On LARRY it
-  is the only generative model here to recover real branch commitment.
-- **FateFlow-Geo** (`models/mixgeoflow.py`) replaces the chord with a
-  density-metric geodesic. **Recorded negative result:** the geodesic *raised* path
-  energy and slightly reduced commitment — the density metric treats the dense
-  undifferentiated blob as cheap and pulls paths toward it, opposing the channel
-  conditioning. Retained for reproducibility and ablation, not as the recommended run.
+<!-- TODO: replace with the exact command your entrypoint exposes -->
+```bash
+# Train and generate the held-out day-4 interpolation
+python -m cdf.mfm.train.main --config <config.yaml>
+
+# Project all methods' predictions into a shared UMAP for comparison
+python run_umap.py
+```
+
+## Baselines
+
+Baseline implementations for reproducing the benchmarking results: TBU.
 
 ## Results
-![benchmark](figures/fig_benchmark_subset.png)
 
-![benchmark_viz](figures/fig_pred_day4_umap.png)
+FateFlow's day-4 reconstruction is compared against the real held-out population and against straight-line flow matching and OT-based baselines using distributional metrics (2-Wasserstein, energy distance, MMD) in PCA space, plus qualitative overlays on the shared UMAP.
 
+![benchmark]({{artifact:art_0494a3a8-cde9-4152-9b4f-ad7faf8b8600}})
+
+![benchmark_viz]({{artifact:art_4ec8110b-b753-475a-a512-a79608c528a9}})
