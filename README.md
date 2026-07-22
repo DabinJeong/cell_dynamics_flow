@@ -1,4 +1,5 @@
 # FateFlow: Flow matching for interpolating cell dynamics during development
+[Demo](https://dabinjeong.github.io/cell_dynamics_flow_demo/)
 
 ## The scientific question
 
